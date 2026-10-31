@@ -1,0 +1,17 @@
+{
+  "schema_version": 1,
+  "timezone": "Pacific/Auckland",
+  "scope": "all_history_with_recent_90_day_comparison",
+  "history_access": "current_thread_only_no_account_history_connector",
+  "history_loaded": false,
+  "facts": [
+    {"id": "E001", "source": "current_user_brief", "claim": "用户已有 Discord SEC 高管买卖机器人，汇报大额买入卖出", "status": "user_reported", "measured_frequency": null, "measured_minutes": null},
+    {"id": "E002", "source": "current_user_brief", "claim": "用户已有 Powershop 每周二自动买特价包；用户提到每月初和周二有特价包", "status": "user_reported", "measured_frequency": null, "measured_minutes": null},
+    {"id": "E003", "source": "current_user_followup", "claim": "用户大部分聊天在 ChatGPT chat/work，希望分析全部历史", "status": "user_reported"}
+  ],
+  "non_facts": [
+    "每天10次、每周100次是用户举例，不是已测频率",
+    "未提供投资组合、观察名单、账单、机器人源码、交易阈值或历史对话",
+    "既有自动化的耗时节省尚未测量"
+  ]
+}

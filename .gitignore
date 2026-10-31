@@ -1,0 +1,10 @@
+# Private source conversations and machine-local state must never be committed.
+private/
+.env
+.env.*
+!.env.example
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+*.log
