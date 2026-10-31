@@ -13,15 +13,17 @@ def net_weekly_minutes(candidate: dict, scenario: str) -> float:
     fraction = candidate["automation_fraction"][scenario]
     manual = candidate["manual_minutes_per_check"]
     review = candidate["review_minutes_per_check"]
-    overhead = (candidate["maintenance_minutes_per_week"]
-                + candidate["exception_minutes_per_week"])
+    maintenance = candidate["maintenance_minutes_per_week"]
+    exceptions = candidate["exception_minutes_per_week"]
     for name, value in {"frequency": frequency, "manual": manual,
-                        "review": review, "overhead": overhead,
+                        "review": review, "maintenance": maintenance,
+                        "exceptions": exceptions,
                         "build": candidate["build_minutes"]["central"]}.items():
         if isinstance(value, bool) or not isinstance(value, (int, float)) or not math.isfinite(value) or value < 0:
             raise ValueError(f"{name} must be a finite nonnegative number")
     if isinstance(fraction, bool) or not isinstance(fraction, (int, float)) or not math.isfinite(fraction) or not 0 <= fraction <= 1:
         raise ValueError("automation_fraction must be between 0 and 1")
+    overhead = maintenance + exceptions
     return frequency * fraction * (manual - review) - overhead
 
 

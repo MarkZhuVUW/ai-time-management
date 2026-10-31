@@ -38,6 +38,12 @@ class EconomicsTests(unittest.TestCase):
         self.assertEqual(result["net_minutes_per_week"]["central"], -5)
         self.assertIsNone(result["weekly_checks_to_break_even_within_12_weeks"])
 
+    def test_negative_cost_cannot_be_hidden_in_positive_overhead(self):
+        self.c["maintenance_minutes_per_week"] = -2
+        self.c["exception_minutes_per_week"] = 10
+        with self.assertRaises(ValueError):
+            evaluate(self.c)
+
 
 if __name__ == "__main__":
     unittest.main()

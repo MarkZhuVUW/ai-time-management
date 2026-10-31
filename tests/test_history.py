@@ -10,7 +10,7 @@ import unittest
 from unittest.mock import patch
 import zipfile
 
-from audit.history import HistoryImportError, analyze_history
+from audit.history import HistoryImportError, analyze_histories, analyze_history
 
 
 AS_OF = datetime(2026, 10, 31, 9, tzinfo=timezone.utc)
@@ -77,6 +77,112 @@ class HistoryTests(unittest.TestCase):
         result = self.analyze([conversation, conversation])
         self.assertEqual(result["counts"]["user_messages"], 1)
         self.assertEqual(result["quality"]["duplicate_user_messages_skipped"], 1)
+
+    def test_multiple_json_and_zip_union_deduplicates_and_retains_sources(self):
+        original = export_conversation([("u1", "user", "2026-10-01T00:00:00Z", "hello")])
+        newer = export_conversation([
+            ("u1", "user", "2026-10-01T00:00:00Z", "hello"),
+            ("u2", "user", "2026-10-02T00:00:00Z", "new prompt"),
+        ])
+        first = self.root / "personal.json"
+        second = self.root / "work.zip"
+        first.write_text(json.dumps([original]), encoding="utf-8")
+        with zipfile.ZipFile(second, "w") as archive:
+            archive.writestr("conversations.json", json.dumps([newer]))
+        result = analyze_histories([first, second], AS_OF)
+        self.assertEqual(result["counts"]["user_messages"], 2)
+        self.assertEqual(result["source"]["files_read"], 2)
+        self.assertEqual(result["source"]["format"], "multiple_exports")
+        self.assertEqual(result["source"]["exports"][0]["unique_user_messages_added"], 1)
+        self.assertEqual(result["source"]["exports"][1]["duplicate_user_messages_skipped"], 1)
+        self.assertEqual(result["evidence_index"][0]["source_indexes"], [0, 1])
+        self.assertEqual(result["evidence_index"][1]["source_indexes"], [1])
+        self.assertNotIn("personal.json", json.dumps(result))
+
+    def test_conflicting_duplicate_versions_are_disclosed(self):
+        paths = [self.root / "one.json", self.root / "two.json"]
+        for path, text in zip(paths, ("old text", "changed text")):
+            path.write_text(json.dumps([export_conversation([("u", "user", None, text)])]), encoding="utf-8")
+        result = analyze_histories(paths, AS_OF)
+        self.assertEqual(result["counts"]["user_messages"], 1)
+        self.assertEqual(result["quality"]["conflicting_duplicate_messages"], 1)
+
+    def test_empty_source_list_is_not_empty_history(self):
+        with self.assertRaises(HistoryImportError):
+            analyze_histories([], AS_OF)
+
+    def test_neutral_taxonomy_covers_unrelated_domains_and_conserves_counts(self):
+        result = self.analyze([export_conversation([
+            ("u1", "user", None, "Plan a travel itinerary and hotel"),
+            ("u2", "user", None, "How do I debug Python?"),
+            ("u3", "user", None, "Need doctor for symptoms"),
+            ("u4", "user", None, "电费水费怎么结算"),
+            ("u5", "user", None, "Which visa for immigration?"),
+        ])])
+        self.assertGreaterEqual(len(result["categories"]), 15)
+        self.assertEqual(result["categories"]["travel"]["primary_user_messages"], 1)
+        self.assertEqual(result["categories"]["software"]["primary_user_messages"], 1)
+        self.assertEqual(result["categories"]["health"]["primary_user_messages"], 1)
+        self.assertEqual(result["categories"]["household_energy"]["primary_user_messages"], 1)
+        self.assertEqual(result["categories"]["powershop"]["primary_user_messages"], 0)
+        self.assertEqual(sum(category["primary_user_messages"] for category in result["categories"].values()), 5)
+
+    def test_sec_seconds_not_regulatory_insider_signal(self):
+        result = self.analyze([export_conversation([
+            ("u1", "user", None, "wait 4 sec before retry"),
+            ("u2", "user", None, "How to inspect form4 insider purchases?"),
+        ])])
+        self.assertEqual(result["categories"]["sec_insiders"]["primary_user_messages"], 1)
+
+    def test_generic_share_and_guidance_do_not_invent_finance_interest(self):
+        result = self.analyze([export_conversation([
+            ("u1", "user", None, "Please share Python code"),
+            ("u2", "user", None, "career guidance for interview"),
+        ])])
+        self.assertEqual(result["categories"]["software"]["primary_user_messages"], 1)
+        self.assertEqual(result["categories"]["career_work"]["primary_user_messages"], 1)
+        self.assertEqual(result["categories"]["investing_events"]["primary_user_messages"], 0)
+        self.assertEqual(result["categories"]["other_finance"]["primary_user_messages"], 0)
+
+    def test_private_review_is_separate_private_and_deduplicated(self):
+        path = self.root / "export.json"
+        path.write_text(json.dumps([export_conversation([("u", "user", "2026-10-01T00:00:00Z", "UNIQUE PRIVATE QUESTION")])]), encoding="utf-8")
+        output = self.root / "private" / "review.json"
+        with patch("audit.history.Path.cwd", return_value=self.root):
+            result = analyze_histories([path, path], AS_OF, private_review_path=output)
+        self.assertNotIn("UNIQUE PRIVATE QUESTION", json.dumps(result))
+        review = json.loads(output.read_text())
+        self.assertEqual(review["questions"][0]["text_excerpt"], "UNIQUE PRIVATE QUESTION")
+        self.assertEqual(review["questions"][0]["source_indexes"], [0, 1])
+        self.assertEqual(review["sample_user_messages"], 1)
+        self.assertEqual(output.stat().st_mode & 0o777, 0o600)
+
+    def test_private_review_rejects_public_path_and_symlink_escape(self):
+        path = self.root / "export.json"
+        path.write_text("[]", encoding="utf-8")
+        with patch("audit.history.Path.cwd", return_value=self.root):
+            with self.assertRaises(HistoryImportError):
+                analyze_histories([path], AS_OF, private_review_path=self.root / "public.json")
+            outside = self.root / "elsewhere"
+            outside.mkdir()
+            (self.root / "private").symlink_to(outside, target_is_directory=True)
+            with self.assertRaises(HistoryImportError):
+                analyze_histories([path], AS_OF, private_review_path=self.root / "private" / "leak.json")
+
+    def test_private_review_is_bounded_stratified_sample(self):
+        path = self.root / "export.json"
+        messages = [(f"old-{i}", "user", "2026-01-01T00:00:00Z", "old unrelated question") for i in range(8)]
+        messages += [(f"new-{i}", "user", "2026-10-01T00:00:00Z", "travel hotel " + "x" * 60) for i in range(8)]
+        path.write_text(json.dumps([export_conversation(messages)]), encoding="utf-8")
+        output = self.root / "private" / "review.json"
+        with patch("audit.history.Path.cwd", return_value=self.root), patch("audit.history.PRIVATE_SAMPLES_PER_STRATUM", 2), patch("audit.history.PRIVATE_EXCERPT_CHARACTERS", 24):
+            result = analyze_histories([path], AS_OF, private_review_path=output)
+        review = json.loads(output.read_text())
+        self.assertEqual(result["counts"]["user_messages"], 16)
+        self.assertEqual(review["sample_user_messages"], 4)
+        self.assertEqual({row["recency"] for row in review["questions"]}, {"older", "recent_90_days"})
+        self.assertTrue(all(len(row["text_excerpt"]) <= 24 for row in review["questions"]))
+        self.assertEqual(review["sampling"], "deterministic_hash_sample_by_primary_category_and_recency")
 
     def test_missing_invalid_and_future_dates_excluded_from_rates(self):
         result = self.analyze([export_conversation([
@@ -204,6 +310,18 @@ class HistoryTests(unittest.TestCase):
         proc = subprocess.run([sys.executable, "-m", "audit.history", str(path), "--output", str(path)], capture_output=True, text=True)
         self.assertEqual(proc.returncode, 2)
         self.assertEqual(path.read_text(), original)
+
+    def test_cli_accepts_multiple_sources_and_protects_each_source(self):
+        paths = [self.root / "one.json", self.root / "two.json"]
+        for path in paths:
+            path.write_text("[]", encoding="utf-8")
+        output = self.root / "aggregate.json"
+        proc = subprocess.run([sys.executable, "-m", "audit.history", *(str(path) for path in paths), "--output", str(output)], capture_output=True, text=True)
+        self.assertEqual(proc.returncode, 0, proc.stderr)
+        self.assertEqual(json.loads(output.read_text())["source"]["files_read"], 2)
+        proc = subprocess.run([sys.executable, "-m", "audit.history", *(str(path) for path in paths), "--output", str(paths[1])], capture_output=True, text=True)
+        self.assertEqual(proc.returncode, 2)
+        self.assertEqual(paths[1].read_text(), "[]")
 
 
 if __name__ == "__main__":

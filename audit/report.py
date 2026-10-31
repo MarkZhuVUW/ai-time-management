@@ -4,8 +4,8 @@ from __future__ import annotations
 
 import argparse
 import csv
-import html
 import json
+import os
 from datetime import datetime
 from pathlib import Path
 from zoneinfo import ZoneInfo
@@ -16,6 +16,8 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 def render_chart(candidates: list[dict], results: list[dict], out: Path) -> None:
+    os.environ.setdefault("MPLCONFIGDIR", str(ROOT / "private/.cache/matplotlib"))
+    os.environ.setdefault("XDG_CACHE_HOME", str(ROOT / "private/.cache"))
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
@@ -37,7 +39,7 @@ def render_chart(candidates: list[dict], results: list[dict], out: Path) -> None
     ax.invert_yaxis()
     ax.axvline(0, color="#64748b", linewidth=1)
     ax.set_xlabel("Incremental net minutes saved per week (assumed inputs)")
-    ax.set_title("WHAT-IF SCENARIOS — NO HISTORICAL USER DATA LOADED", loc="left", pad=25, weight="bold", fontsize=12)
+    ax.set_title("WHAT-IF SCENARIOS — ASSUMED INPUTS, NOT MEASURED USER TIME", loc="left", pad=25, weight="bold", fontsize=12)
     ax.grid(axis="x", alpha=0.18)
     ax.set_axisbelow(True)
     for side in ("top", "right", "left"):
@@ -48,6 +50,45 @@ def render_chart(candidates: list[dict], results: list[dict], out: Path) -> None
     fig.savefig(out / "scenario-savings.svg")
     fig.savefig(out / "scenario-savings.png", dpi=180)
     plt.close(fig)
+
+
+def observed_summary(history: dict | None) -> dict:
+    """Allowlist aggregate statistics, keeping per-message evidence private."""
+    if history is None:
+        return {"loaded": False, "status": "not_provided", "counts": None, "window": None}
+    result = {"loaded": True}
+    for key in ("status", "counts", "window", "quality", "categories", "recent_90_days", "older", "limitations"):
+        result[key] = history.get(key)
+    result["metrics"] = {key: value for key, value in history.get("metrics", {}).items()
+                         if key not in ("daily_counts", "weekly_counts")}
+    result["coverage"] = "Only supplied exports; complete account/workspace coverage unknown"
+    return result
+
+
+def render_observed_chart(history: dict, out: Path) -> bool:
+    if history.get("status") != "analyzed":
+        return False
+    import matplotlib.pyplot as plt
+
+    categories = history.get("categories", {})
+    pairs = sorted(((name, row["primary_user_messages"]) for name, row in categories.items()),
+                   key=lambda item: item[1], reverse=True)
+    pairs = [(name, count) for name, count in pairs if count > 0]
+    if not pairs:
+        return False
+    fig, ax = plt.subplots(figsize=(11, max(4.5, len(pairs) * .4 + 2)))
+    ax.barh([name for name, _ in pairs], [count for _, count in pairs], color="#0f766e")
+    ax.invert_yaxis()
+    ax.set_xlabel("Observed user messages (primary rule-based category; not task count)")
+    ax.set_title("SUPPLIED EXPORTS ONLY — TOPIC COUNTS, NOT INEFFICIENCY", loc="left", fontsize=12, pad=20)
+    ax.grid(axis="x", alpha=.2)
+    ax.set_axisbelow(True)
+    fig.text(.02, .025, "Classification needs review. More questions do not establish wasted time or automation suitability.", fontsize=8)
+    fig.tight_layout(rect=(0, .06, 1, 1))
+    fig.savefig(out / "observed-topic-counts.svg")
+    fig.savefig(out / "observed-topic-counts.png", dpi=180)
+    plt.close(fig)
+    return True
 
 
 def write_dashboard(candidates: list[dict], out: Path) -> None:
@@ -68,7 +109,7 @@ const inputs={};for(const [key,label]of fields){const el=document.createElement(
 const output=document.createElement('output');output.setAttribute('aria-live','polite');s.append(output);const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');svg.setAttribute('viewBox','0 0 800 100');svg.setAttribute('role','img');svg.setAttribute('aria-label','净省时情景柱状图');s.append(svg);const gate=document.createElement('p');gate.textContent='验收前提：'+c.validation_gate;s.append(gate);
 function update(){const v={};for(const [k,i]of Object.entries(inputs)){v[k]=i.value===''?NaN:Number(i.value);if(!Number.isFinite(v[k])||v[k]<0||(k==='coverage'&&v[k]>1)){output.textContent='请输入有效的非负数字，覆盖率在0到1之间。';svg.replaceChildren();return;}}
 const net=v.freq*v.coverage*(v.manual-v.review)-v.maintenance-v.exceptions;const annual=(net*52-v.build)/60;output.textContent=`假设净省时 ${net.toFixed(1)} 分钟/周；首年扣除建设 ${annual.toFixed(1)} 小时；回本 ${net>0?(v.build/net).toFixed(1)+'周':'无法回本'}`;
-svg.replaceChildren();const ns='http://www.w3.org/2000/svg';const baseline=document.createElementNS(ns,'line');baseline.setAttribute('x1',100);baseline.setAttribute('x2',100);baseline.setAttribute('y1',10);baseline.setAttribute('y2',90);baseline.setAttribute('stroke','#64748b');svg.append(baseline);const rect=document.createElementNS(ns,'rect');const width=Math.min(650,Math.abs(net)*5);rect.setAttribute('x',net>=0?100:Math.max(0,100-Math.min(100,width)));rect.setAttribute('y',25);rect.setAttribute('width',net>=0?width:Math.min(100,width));rect.setAttribute('height',35);rect.setAttribute('fill',net>=0?'#2563eb':'#dc2626');svg.append(rect);const text=document.createElementNS(ns,'text');text.setAttribute('x',110);text.setAttribute('y',84);text.textContent='正值省时；负值增加工作；横轴5px/分钟，超界截断。';svg.append(text);}
+svg.replaceChildren();const ns='http://www.w3.org/2000/svg';const baseline=document.createElementNS(ns,'line');baseline.setAttribute('x1',400);baseline.setAttribute('x2',400);baseline.setAttribute('y1',10);baseline.setAttribute('y2',90);baseline.setAttribute('stroke','#64748b');svg.append(baseline);const rect=document.createElementNS(ns,'rect');const width=Math.min(375,Math.abs(net)*5);rect.setAttribute('x',net>=0?400:400-width);rect.setAttribute('y',25);rect.setAttribute('width',width);rect.setAttribute('height',35);rect.setAttribute('fill',net>=0?'#2563eb':'#dc2626');svg.append(rect);const text=document.createElementNS(ns,'text');text.setAttribute('x',25);text.setAttribute('y',84);text.textContent=`净 ${net.toFixed(1)} 分钟/周；正负同尺度，显示-75至+75分钟${Math.abs(net)>75?'；柱已截断，请看精确数值':''}。`;svg.append(text);}
 for(const i of Object.values(inputs))i.addEventListener('input',update);document.getElementById('cards').append(s);update();}
 </script></html>""".replace("__DATA__", encoded)
     (out / "calculator.html").write_text(page, encoding="utf-8")
@@ -76,14 +117,23 @@ for(const i of Object.values(inputs))i.addEventListener('input',update);document
 
 def generate(scenario_path: Path, out: Path, history_path: Path | None = None) -> None:
     data, results = load_scenarios(scenario_path)
-    out.mkdir(parents=True, exist_ok=True)
     # Explicit allowlist: do not copy per-message evidence_index/source paths to GitHub.
     history = json.loads(history_path.read_text(encoding="utf-8")) if history_path else None
+    generated_names = ("summary.json", "scenarios.csv", "REPORT.zh-CN.md", "scenario-savings.svg",
+                       "scenario-savings.png", "calculator.html", "observed-topic-counts.svg", "observed-topic-counts.png")
+    if history_path and any(history_path.resolve() == (out / name).resolve() for name in generated_names):
+        raise ValueError("Report output must not overwrite the source history analysis")
+    if history is not None and (not isinstance(history, dict) or history.get("schema_version") != 1
+                                or history.get("status") not in ("analyzed", "no_user_messages", "no_dated_user_messages")):
+        raise ValueError("Expected an audit.history schema_version=1 analysis, not a raw export")
+    out.mkdir(parents=True, exist_ok=True)
+    # Remove only our own stale observed plots, never arbitrary files in the directory.
+    if not history or history.get("status") != "analyzed":
+        for name in ("observed-topic-counts.svg", "observed-topic-counts.png"):
+            (out / name).unlink(missing_ok=True)
     summary = {
         "generated_date": datetime.now(ZoneInfo("Pacific/Auckland")).date().isoformat(),
-        "history": {"loaded": history is not None, "status": history.get("status") if history else "not_provided",
-                    "counts": history.get("counts") if history else None,
-                    "window": history.get("window") if history else None},
+        "history": observed_summary(history),
         "scenario_status": data["status"], "scenarios": results,
         "no_combined_savings_total": "candidate scopes may overlap",
     }
@@ -101,10 +151,32 @@ def generate(scenario_path: Path, out: Path, history_path: Path | None = None) -
     for c, r in zip(data["candidates"], results):
         net = r["net_minutes_per_week"]
         rows.append(f"| {c['name_zh']} | {c['checks_per_week']['central']:g} | {net['low']:g} / {net['central']:g} / {net['high']:g} | {r['build_minutes_central']} | {r['central_payback_weeks']} | {r['central_annual_net_hours_after_build']} |")
+    payback_examples = "；".join(f"{r['name_zh']}约{r['central_payback_weeks']}周回本" if r["central_payback_weeks"] is not None
+                                 else f"{r['name_zh']}无法回本" for r in results)
     history_note = "未提供；没有真实历史问题总数、重复次数、平均每周次数，也没有实测时间。"
+    observed_section = ""
     if history:
         history_note = (f"已导入，状态 `{history.get('status')}`；匿名汇总见 summary.json。"
                         "分类仍需人工核对；有数据不等于任务识别和耗时测量已经完成。")
+        counts = history.get("counts", {})
+        metrics = history.get("metrics", {})
+        recent, older = history.get("recent_90_days", {}), history.get("older", {})
+        category_rows = "\n".join(
+            f"| {name} | {row['primary_user_messages']} | {row['inferred_sessions']} | {row['prompts_per_calendar_week']} |"
+            for name, row in sorted(history.get("categories", {}).items(), key=lambda item: item[1]["primary_user_messages"], reverse=True))
+        observed_section = f"""
+## 已提供导出中的实际统计（主题初筛，非低效排名）
+
+用户消息 {counts.get('user_messages')}；有效日期消息 {counts.get('dated_user_messages')}；每个日历周 {metrics.get('prompts_per_calendar_week')} 条；推断交互会话 {metrics.get('inferred_sessions')} 段。会话不等于实际工作次数。
+
+最近90天：{recent.get('user_messages')} 条 / {recent.get('calendar_days')} 天，{recent.get('prompts_per_calendar_week')} 条/周。更早：{older.get('user_messages')} 条 / {older.get('calendar_days')} 天，{older.get('prompts_per_calendar_week')} 条/周。
+
+| 初筛标签 | 实际主标签消息数 | 推断交互会话 | 消息/日历周 |
+| --- | ---: | ---: | ---: |
+{category_rows}
+
+记录覆盖只代表实际提供的导出。质量计数见 `summary.json`；未分类内容、规则误判和跨次工作需要私有原文复核，不能用主题热度推断浪费时间。
+"""
     report = f"""# 自动化机会审计：阶段报告
 
 ## 可回答与待回答
@@ -114,6 +186,9 @@ def generate(scenario_path: Path, out: Path, history_path: Path | None = None) -
 范围：全部历史为主，最近 90 天用于趋势对照，按新西兰时区统计。当前事实只包括已有 SEC Discord 机器人、Powershop 周二买包，以及聊天主要发生在 chat/work。无法据此声称你在其他主题上投入了多少时间。
 
 目前推荐的是验证顺序，不是用户实际省时排名：先检查现有 SEC 机器人还留下哪些手工筛选；再从历史验证是否经常反复追踪同一股票；Powershop 仅补实际缺口。不要重建已有效的自动化。
+
+**当前四个候选只来自两个已知系统及其邻近假设，不是所有兴趣归纳。** 取得历史后，按[全历史工作流方法](../docs/methodology.md)重新发现需求；新领域可以完全改变现在的候选名单。
+{observed_section}
 
 ## 情景柱状图（不是历史实测）
 
@@ -131,7 +206,7 @@ def generate(scenario_path: Path, out: Path, history_path: Path | None = None) -
 
 回本只在净省时大于零时成立；首年净收益再扣一次建设投入。开发时长只是预算假设，未验证的接口、反爬、账户限制可能大幅增加成本。
 
-在这些输入下，股票变化摘要约11.4周回本；SEC 增量整理约14.4周；Powershop 小缺口约90周。由此只能推导：低频的小事可能不值得做新 App，适合补现有脚本或一个提醒。不能据此推导你本人会获得这些收益。
+在这些输入下，{payback_examples}。建设预算与候选设计中的完整改造范围对应，不假定未知接口可以几分钟接好。由此只能推导：低频的小事可能不值得做新 App，适合补现有脚本或一个提醒。不能据此推导你本人会获得这些收益。
 
 ## 候选落地方式
 
@@ -146,15 +221,17 @@ def generate(scenario_path: Path, out: Path, history_path: Path | None = None) -
 
 1. 将真实导出放入 `private/`，执行 `python3 -m audit.history private/conversations.json --output private/history-analysis.json`。ZIP 也可直接读；不同账户/工作区的导出覆盖不应混为完整账户历史。
 2. 检查导入覆盖、时间缺失、会话分支、分类盲区和每周分布。全历史统计与最近90天分开报告。不会从聊天时间戳推算真实工作分钟。
-3. 对重复最多的工作抽取 10 个私有证据会话人工复核，再进行两周短期计时：动作开始/结束、是否仍需核查、通知审核和异常分钟。旧历史只能提供频率线索；无法补测的旧分钟数保持估算。
+3. 对重复最多的工作抽取私有证据会话复核；优先利用现有运行日志，或只对最有希望的项目做五次快速计时校准（可选）。没有计时也可以用明确区间提供方案，不要求额外长期填日志。旧历史不能补测的分钟数保持估算。
 4. 给每个动作一个唯一 ID，处理候选覆盖重叠，扣除现有自动化，才能计算组合收益。先试运行一个项目；达到实际净省时门槛后才上线。
 
 ## 尚未完成
 
-全历史行为归纳、真实低效事项排名、实测柱状图、定期任务创建、线上运行均未完成。当前完成的是可复现的本地分析工具、候选设计、透明收益情景、版本化进度。原始对话及逐条私有证据不提交 GitHub。
+全历史工作归纳、真实低效事项排名、实测耗时柱状图、定期任务创建、线上运行均未完成。当前完成的是可复现的本地分析工具、候选设计、透明收益情景、版本化进度。导入数据后的主题次数也不能当作已测耗时。原始对话及逐条私有证据不提交 GitHub。
 """
     (out / "REPORT.zh-CN.md").write_text(report, encoding="utf-8")
     render_chart(data["candidates"], results, out)
+    if history:
+        render_observed_chart(history, out)
     write_dashboard(data["candidates"], out)
 
 

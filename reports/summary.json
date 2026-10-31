@@ -1,0 +1,58 @@
+{
+  "generated_date": "2026-10-31",
+  "history": {
+    "loaded": false,
+    "status": "not_provided",
+    "counts": null,
+    "window": null
+  },
+  "scenario_status": "illustrative_assumptions_not_user_measurements",
+  "scenarios": [
+    {
+      "id": "watchlist_changes",
+      "name_zh": "关注股票的重要变化摘要",
+      "status": "illustrative_assumptions_not_user_measurements",
+      "net_minutes_per_week": {
+        "low": 2.0,
+        "central": 21.0,
+        "high": 56.0
+      },
+      "build_minutes_central": 600,
+      "central_payback_weeks": 28.6,
+      "central_annual_net_hours_after_build": 8.2,
+      "weekly_checks_to_break_even_within_12_weeks": 14.25,
+      "validation_gate": "历史中存在反复核查同一股票的工作；有关注名单；两周试运行发现的事件可复核，且净省时为正"
+    },
+    {
+      "id": "sec_enrichment",
+      "name_zh": "现有SEC机器人的筛选与研究整理",
+      "status": "illustrative_assumptions_not_user_measurements",
+      "net_minutes_per_week": {
+        "low": -0.4,
+        "central": 10.4,
+        "high": 28.4
+      },
+      "build_minutes_central": 480,
+      "central_payback_weeks": 46.2,
+      "central_annual_net_hours_after_build": 1.01,
+      "weekly_checks_to_break_even_within_12_weeks": 18.33,
+      "validation_gate": "先检查现有机器人是否已经去重、分交易类型和整理关键信息；只有尚存的手工研究动作可计入收益"
+    },
+    {
+      "id": "powershop_gap",
+      "name_zh": "Powershop覆盖/购买结果与月初机会检查",
+      "status": "illustrative_assumptions_not_user_measurements",
+      "net_minutes_per_week": {
+        "low": -0.08,
+        "central": 1.0,
+        "high": 3.5
+      },
+      "build_minutes_central": 480,
+      "central_payback_weeks": 480.0,
+      "central_annual_net_hours_after_build": -7.13,
+      "weekly_checks_to_break_even_within_12_weeks": 10.25,
+      "validation_gate": "验证周二自动购买之外是否还有实际手工核查；月初购买不得重复；若只有偶发核查，优先低成本提醒而不是新App"
+    }
+  ],
+  "no_combined_savings_total": "candidate scopes may overlap"
+}

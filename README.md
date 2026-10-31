@@ -23,3 +23,27 @@
 4. 可分享的图表与报告；没有数据时明确空缺，不制造柱状图“实绩”。
 
 状态：历史源尚未提供；可独立完成分析工具与候选方案，真实全历史结论等待数据。
+
+## 使用与已生成成果
+
+Python 3.11+。导入器、统计和收益计算只依赖标准库；图表使用 `requirements-report.txt` 中的 Matplotlib（当前环境已安装并验证）。
+
+```bash
+cd /workspace/ai-
+python3 -m unittest discover -s tests -v
+python3 -m audit.report
+# 取得真实导出后再执行；原文和逐条索引保持私有。
+python3 -m audit.history private/conversations.json --output private/history-analysis.json
+# 多个账户/工作区无需手工合并；用于语义审阅的原文片段仍只写到 private/。
+python3 -m audit.history private/personal.zip private/work.zip --output private/history-analysis.json --private-review private/question-review.json
+python3 -m audit.report --history private/history-analysis.json
+```
+
+- [阶段报告](reports/REPORT.zh-CN.md)：真实证据、未完成部分与候选方案。
+- [情景柱状图](reports/scenario-savings.png)：明确标记为假设，并非个人实测时间。
+- [离线收益计算器](reports/calculator.html)：修改次数、审核、维护和建设成本，观察是否值得做。
+- [完整候选设计](docs/automation-designs.md)：App / 定期任务选择、触发条件、依赖和验收。
+- [导入说明](docs/history-import.md)：格式、覆盖、去重和频率定义。
+- [全历史审计方法](docs/methodology.md)：发现此前未知的工作流，区分研究兴趣与重复劳动。
+
+不要将未知历史写成零历史，不要将关键词主题当作低效工作，不要将多轮追问算成多个可替代任务。公开汇总默认不包含每日时间线和逐条证据索引。新增真实汇总也应在推送前检查。

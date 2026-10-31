@@ -1,0 +1,2 @@
+# Optional: the history importer and time model use only Python's standard library.
+matplotlib==3.10.8
