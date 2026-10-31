@@ -1,0 +1,66 @@
+{
+  "schema_version": 1,
+  "status": "illustrative_assumptions_not_user_measurements",
+  "unit": "incremental_manual_checks_per_week_after_existing_automation",
+  "currency": "minutes",
+  "notes": [
+    "所有频率、分钟数、覆盖率和建设成本都是情景假设，不来自用户历史。",
+    "情景对象是人工核查动作，不是聊天消息；一段研究可能包含多条提问。",
+    "收益只针对现有机器人尚未替代的工作；不得与现有机器人收益相加。",
+    "项目可能覆盖相同核查动作，不输出总节省时间。",
+    "建设成本不含未知 API 接入、账户限制和现有源码改造。"
+  ],
+  "candidates": [
+    {
+      "id": "watchlist_changes",
+      "name_zh": "关注股票的重要变化摘要",
+      "name_chart": "Watchlist material changes",
+      "mode": "App; ChatGPT task only for a small public-source watchlist",
+      "evidence": ["E001"],
+      "evidence_status": "adjacent_hypothesis_unvalidated",
+      "checks_per_week": {"low": 3, "central": 7, "high": 14},
+      "automation_fraction": {"low": 0.6, "central": 0.8, "high": 0.9},
+      "manual_minutes_per_check": 6,
+      "review_minutes_per_check": 1,
+      "maintenance_minutes_per_week": 5,
+      "exception_minutes_per_week": 2,
+      "build_minutes": {"low": 180, "central": 240, "high": 480},
+      "validation_gate": "历史中存在反复核查同一股票的工作；有关注名单；两周试运行发现的事件可复核，且净省时为正",
+      "implementation_status": "proposal_not_deployed"
+    },
+    {
+      "id": "sec_enrichment",
+      "name_zh": "现有SEC机器人的筛选与研究整理",
+      "name_chart": "SEC bot triage enrichment",
+      "mode": "Extend existing App",
+      "evidence": ["E001"],
+      "evidence_status": "existing_bot_confirmed_increment_unvalidated",
+      "checks_per_week": {"low": 2, "central": 6, "high": 12},
+      "automation_fraction": {"low": 0.6, "central": 0.8, "high": 0.9},
+      "manual_minutes_per_check": 4,
+      "review_minutes_per_check": 1,
+      "maintenance_minutes_per_week": 3,
+      "exception_minutes_per_week": 1,
+      "build_minutes": {"low": 90, "central": 150, "high": 300},
+      "validation_gate": "先检查现有机器人是否已经去重、分交易类型和整理关键信息；只有尚存的手工研究动作可计入收益",
+      "implementation_status": "proposal_not_deployed"
+    },
+    {
+      "id": "powershop_gap",
+      "name_zh": "Powershop覆盖/购买结果与月初机会检查",
+      "name_chart": "Powershop incremental checks",
+      "mode": "Extend existing App; reminder-only task as fallback",
+      "evidence": ["E002"],
+      "evidence_status": "existing_bot_confirmed_gap_unvalidated",
+      "checks_per_week": {"low": 0.23, "central": 0.5, "high": 1},
+      "automation_fraction": {"low": 0.8, "central": 0.8, "high": 0.9},
+      "manual_minutes_per_check": 6,
+      "review_minutes_per_check": 1,
+      "maintenance_minutes_per_week": 0.5,
+      "exception_minutes_per_week": 0.5,
+      "build_minutes": {"low": 45, "central": 90, "high": 240},
+      "validation_gate": "验证周二自动购买之外是否还有实际手工核查；月初购买不得重复；若只有偶发核查，优先低成本提醒而不是新App",
+      "implementation_status": "proposal_not_deployed"
+    }
+  ]
+}
